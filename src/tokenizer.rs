@@ -25,7 +25,8 @@ pub enum Token<'s>
     RightBrace,
     LeftCurlyBrace,
     RightCurlyBrace,
-    ThinArrow, 
+    ThinArrow,
+    DoubleColon,
     EndOfFile,
     StringLiteral(&'s str),
     Identifier(&'s str)
@@ -33,8 +34,7 @@ pub enum Token<'s>
 
 pub enum TokenizationError
 {
-    UnclosedDelimiter,
-    FileEndedWithIdentifier
+    UnclosedDelimiter
 }
 
 impl std::fmt::Display for TokenizationError
@@ -42,8 +42,7 @@ impl std::fmt::Display for TokenizationError
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self
         {
-            TokenizationError::UnclosedDelimiter => write!(f, "Unclosed Delimiter!"),
-            TokenizationError::FileEndedWithIdentifier => write!(f, "File Ended with Identifier!"),
+            TokenizationError::UnclosedDelimiter => write!(f, "Unclosed Delimiter!")
         }
     }
 }
@@ -63,6 +62,7 @@ impl<'s> std::fmt::Debug for Token<'s>
             Self::LeftCurlyBrace => write!(f, "~{{"),
             Self::RightCurlyBrace => write!(f, "~}}"),
             Self::ThinArrow => write!(f, "~->"),
+            Self::DoubleColon => write!(f, "~::"),
             Self::EndOfFile => write!(f, "~EOF"),
             Self::StringLiteral(s) => write!(f, "~\"{s}\""),
             Self::Identifier(s) => write!(f, "|{s}|"),
@@ -86,12 +86,14 @@ impl<'s> Token<'s>
         }
 
         keyword!(string, "import", Token::Import);
+        keyword!(string, "fn", Token::Fn);
         keyword!(string, "(", Token::LeftParen);
         keyword!(string, ")", Token::RightParen);
         keyword!(string, "[", Token::LeftBrace);
         keyword!(string, "]", Token::RightBrace);
         keyword!(string, "{", Token::LeftCurlyBrace);
         keyword!(string, "}", Token::RightCurlyBrace);
+        keyword!(string, "::", Token::DoubleColon);
 
         None
     }
@@ -121,22 +123,25 @@ impl<'s> Token<'s>
 
 
         // Identifier
-        // keep incrementing the string up untill we find another keyword
+        // keep incrementing the string up until we find another keyword
         let mut identifier_size: usize = 0;
 
         loop
         {
+            if identifier_size > string.len()
+            {
+                return Ok(("", Token::Identifier(string)));
+            }
+
             if string[..identifier_size].ends_with([' ', '\n'])
             {
                 return Ok((&string[identifier_size - 1..], Token::Identifier(&string[..identifier_size - 1])));
             }
 
-            if let Some((s, t)) = Self::try_get_keyword(&string[identifier_size..])
+            if let Some((_, _)) = Self::try_get_keyword(&string[identifier_size..])
             {
                 return Ok((&string[identifier_size..], Token::Identifier(&string[..identifier_size])));
             }
-
-            // TODO: early termination
 
             identifier_size += 1;
         }

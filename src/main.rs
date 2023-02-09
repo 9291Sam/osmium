@@ -2,12 +2,18 @@ use std::{fs::File, io::Read};
 
 use osmium::{tokenizer::Token, lexer::Lexeme};
 
-fn densify(s: String) -> String
+// (line, column)
+fn find_line_and_column(raw_file: &str, str_to_find: &str) -> Option<(usize, usize)>
 {
-    s.replace(['\n', ' '], "")
-}
+    let idx_of_found: usize = raw_file.find(str_to_find)? + 1;
 
-// fn find_location_in_file
+    let number_of_lines = raw_file[..idx_of_found].matches('\n').count();
+
+    let column = raw_file.splitn(number_of_lines, '\n').nth(number_of_lines - 1).unwrap().find(str_to_find).unwrap();
+
+
+    Some((number_of_lines, column))
+}
 
 fn main()
 {
@@ -17,7 +23,7 @@ fn main()
     let tokens: Vec<Token> = match Token::parse(&raw_file)
     {
         Ok(tokens) => tokens,
-        Err((e, s)) => panic!("Compile Error: {e} @ {s}")
+        Err((e, s)) => panic!("Compile Error: {e} @ {:?}", find_line_and_column(&raw_file, &s))
     };
 
     tokens.iter().for_each(|t| println!("Token: {t:?}"));
