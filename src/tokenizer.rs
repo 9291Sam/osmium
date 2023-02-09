@@ -1,27 +1,31 @@
-fn between<'a>(source: &'a str, start: &'a str, end: &'a str) -> Option<&'a str> {
-    let start_position = source.find(start);
+fn between<'a>(source: &'a str, start: &'a str, end: &'a str) -> Option<&'a str>
+{
+    if let Some(mut start_position) = source.find(start)
+    {
+        start_position += start.len();
 
-    if start_position.is_some() {
-        let start_position = start_position.unwrap() + start.len();
         let source = &source[start_position..];
         let end_position = source.find(end)?;
-        return Some(&source[..end_position]);
+        
+        Some(&source[..end_position])
     }
-    return None;
+    else
+    {
+        None
+    }
 }
 
 pub enum Token<'s>
 {
     Import,
     Fn,
-    EqualsSign,
-    Quote,
     LeftParen,
     RightParen,
     LeftBrace,
     RightBrace,
     LeftCurlyBrace,
     RightCurlyBrace,
+    ThinArrow, 
     EndOfFile,
     StringLiteral(&'s str),
     Identifier(&'s str)
@@ -29,7 +33,19 @@ pub enum Token<'s>
 
 pub enum TokenizationError
 {
-    UnclosedDelimiter
+    UnclosedDelimiter,
+    FileEndedWithIdentifier
+}
+
+impl std::fmt::Display for TokenizationError
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self
+        {
+            TokenizationError::UnclosedDelimiter => write!(f, "Unclosed Delimiter!"),
+            TokenizationError::FileEndedWithIdentifier => write!(f, "File Ended with Identifier!"),
+        }
+    }
 }
 
 impl<'s> std::fmt::Debug for Token<'s>
@@ -40,14 +56,13 @@ impl<'s> std::fmt::Debug for Token<'s>
         {
             Self::Import => write!(f, "~Import"),
             Self::Fn => write!(f, "~Fn"),
-            Self::EqualsSign => write!(f, "~EqualsSign"),
-            Self::Quote => write!(f, "~\""),
             Self::LeftParen => write!(f, "~("),
             Self::RightParen => write!(f, "~)"),
             Self::LeftBrace => write!(f, "~["),
             Self::RightBrace => write!(f, "~]"),
             Self::LeftCurlyBrace => write!(f, "~{{"),
             Self::RightCurlyBrace => write!(f, "~}}"),
+            Self::ThinArrow => write!(f, "~->"),
             Self::EndOfFile => write!(f, "~EOF"),
             Self::StringLiteral(s) => write!(f, "~\"{s}\""),
             Self::Identifier(s) => write!(f, "|{s}|"),
@@ -58,45 +73,76 @@ impl<'s> std::fmt::Debug for Token<'s>
 
 impl<'s> Token<'s>
 {
-    fn find(string: &str) -> Result<(&str, Token), TokenizationError>
+    fn try_get_keyword(string: &str) -> Option<(&str, Token)>
+    {
+        macro_rules! keyword {
+            ($working_string: ident, $match_string: literal, $match_token: expr) => {
+                if let Some(s) = $working_string.strip_prefix($match_string)
+                {
+                    return Some((s, $match_token));
+                }
+
+            };
+        }
+
+        keyword!(string, "import", Token::Import);
+        keyword!(string, "(", Token::LeftParen);
+        keyword!(string, ")", Token::RightParen);
+        keyword!(string, "[", Token::LeftBrace);
+        keyword!(string, "]", Token::RightBrace);
+        keyword!(string, "{", Token::LeftCurlyBrace);
+        keyword!(string, "}", Token::RightCurlyBrace);
+
+        None
+    }
+
+    fn find(string: &str) -> Result<(&str, Token), (TokenizationError, &str)>
     {
         if string.is_empty()
         {
             return Ok(("", Token::EndOfFile));
         }
 
-        // Key words
-        if let Some(string) = string.strip_prefix("import")
+        if let Some((s, t)) = Self::try_get_keyword(string)
         {
-            return Ok((string, Token::Import));
+            return Ok((s, t));
         }
-
-        if let Some(string) = string.strip_prefix("fn")
-        {
-            return Ok((string, Token::Fn));
-        }
-
-
-        // Symbols
-
-
+        
         // Literals
         if string.starts_with('\"')
         {
-            let found_literal: &str = between(string, "\"", "\"").expect("Unclosed Delimiter");
+            let found_literal: &str = match between(string, "\"", "\"")
+            {
+                Some(s) => s,
+                None => return Err((TokenizationError::UnclosedDelimiter, string)),
+            };
             return Ok((&string[found_literal.len() + 2..], Token::StringLiteral(found_literal)));
         }
 
-        // if string[0] is
 
+        // Identifier
+        // keep incrementing the string up untill we find another keyword
+        let mut identifier_size: usize = 0;
 
-        // the identifers is the start to the first whitespace
-        // println!("str: {string}");
-        let idx: usize = string.find(' ').expect("No Final Identifier!");
-        Ok((&string[idx..], Token::Identifier(&string[..idx])))
+        loop
+        {
+            if string[..identifier_size].ends_with([' ', '\n'])
+            {
+                return Ok((&string[identifier_size - 1..], Token::Identifier(&string[..identifier_size - 1])));
+            }
+
+            if let Some((s, t)) = Self::try_get_keyword(&string[identifier_size..])
+            {
+                return Ok((&string[identifier_size..], Token::Identifier(&string[..identifier_size])));
+            }
+
+            // TODO: early termination
+
+            identifier_size += 1;
+        }
     }
 
-    pub fn parse(string: &str) -> Result<Vec<Token>, TokenizationError>
+    pub fn parse(string: &str) -> Result<Vec<Token>, (TokenizationError, &str)>
     {
         let mut output: Vec<Token> = Vec::new();
 

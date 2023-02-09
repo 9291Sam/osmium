@@ -1,0 +1,17 @@
+module std
+
+fn println(s: str)
+{
+    
+}
+
+fn print(s: str)
+{
+    inline_c!
+    {
+        fputs()
+    }
+}
+
+
+fn size<T>() -> 
