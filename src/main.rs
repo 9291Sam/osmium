@@ -1,6 +1,17 @@
 use std::{fs::File, io::Read};
 
-enum Identifier
+fn between<'a>(source: &'a str, start: &'a str, end: &'a str) -> Option<&'a str> {
+    let start_position = source.find(start);
+
+    if start_position.is_some() {
+        let start_position = start_position.unwrap() + start.len();
+        let source = &source[start_position..];
+        let end_position = source.find(end)?;
+        return Some(&source[..end_position]);
+    }
+    return None;
+}
+enum Token<'s>
 {
     Import,
     Fn,
@@ -12,101 +23,109 @@ enum Identifier
     RightBrace,
     LeftCurlyBrace,
     RightCurlyBrace,
-    Identifier(String)
+    StringLiteral(&'s str),
+    Identifier(&'s str)
 }
 
-impl std::fmt::Debug for Identifier
+impl<'s> std::fmt::Debug for Token<'s>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
     {
         match self
         {
-            Self::Import => write!(f, "!Import"),
-            Self::Fn => write!(f, "!Fn"),
-            Self::EqualsSign => write!(f, "!EqualsSign"),
+            Self::Import => write!(f, "~Import"),
+            Self::Fn => write!(f, "~Fn"),
+            Self::EqualsSign => write!(f, "~EqualsSign"),
+            Self::Quote => write!(f, "~\""),
+            Self::LeftParen => write!(f, "~("),
+            Self::RightParen => write!(f, "~)"),
+            Self::LeftBrace => write!(f, "~["),
+            Self::RightBrace => write!(f, "~]"),
+            Self::LeftCurlyBrace => write!(f, "~{{"),
+            Self::RightCurlyBrace => write!(f, "~}}"),
+            Self::StringLiteral(s) => write!(f, "~\"{s}\""),
             Self::Identifier(s) => write!(f, "|{s}|"),
-            Identifier::Quote => write!(f, "!\""),
-            Identifier::LeftParen => write!(f, "!("),
-            Identifier::RightParen => write!(f, "!)"),
-            Identifier::LeftBrace => write!(f, "!["),
-            Identifier::RightBrace => write!(f, "!]"),
-            Identifier::LeftCurlyBrace => write!(f, "!{{"),
-            Identifier::RightCurlyBrace => write!(f, "!}}")
         }
     }
 }
-
-impl Identifier
-{
-    fn parse(data: &[&str]) -> Vec<Identifier>
+enum FindReturn
     {
-        let mut output: Vec<Identifier> = Vec::new();
+        EndOfInput,
+        UnclosedDelimiter,
+    }
 
-        for s in data.iter()
+impl<'s> Token<'s>
+{
+    
+    // &str of the rest of the string
+    // Token - the token removed
+    fn find(string: &str) -> Result<(&str, Token), FindReturn>
+    {
+        if string.is_empty()
         {
-            match *s
-            {
-                "import" => output.push(Identifier::Import),
-                "fn" => output.push(Identifier::Fn),
-                "=" => output.push(Identifier::EqualsSign),
-                "\"" => output.push(Identifier::Quote),
-                "(" => output.push(Identifier::LeftParen),
-                ")" => output.push(Identifier::RightParen),
-                "[" => output.push(Identifier::LeftBrace),
-                "]" => output.push(Identifier::RightBrace),
-                "{" => output.push(Identifier::LeftCurlyBrace),
-                "}" => output.push(Identifier::RightCurlyBrace),
-                _ => output.push(Identifier::Identifier(String::from(*s)))
-            }
+            return Err(FindReturn::EndOfInput);
         }
 
+        // Key words
+        if let Some(string) = string.strip_prefix("import")
+        {
+            return Ok((string, Token::Import));
+        }
+
+        if let Some(string) = string.strip_prefix("fn")
+        {
+            return Ok((string, Token::Fn));
+        }
+
+
+        // Symbols
+
+
+        // Literals
+        if string.starts_with('\"')
+        {
+            let found_literal: &str = between(string, "\"", "\"").expect("Unclosed Delimiter");
+            return Ok((&string[found_literal.len() + 2..], Token::StringLiteral(found_literal)));
+        }
+
+        // if string[0] is
+
+
+        // the identifers is the start to the first whitespace
+        // println!("str: {string}");
+        let idx: usize = string.find(' ').expect("No Final Identifier!");
+        Ok((&string[idx..], Token::Identifier(&string[..idx])))
+    }
+
+    fn parse(string: &str) -> Vec<Token>
+    {
+        let mut output: Vec<Token> = Vec::new();
+
+        let mut rest_str: &str = string;
+
+        while let Ok((next_str, t)) = Token::find(rest_str)
+        {
+            rest_str = next_str.trim_start();
+            output.push(t);
+        }
+        
         output
     }
 }
 
-fn trim_whitespace(s: &str) -> String
-{
-    // second attempt: only allocate a string
-    let mut result = String::with_capacity(s.len());
-    s.split_whitespace().for_each(|w| {
-        if !result.is_empty()
-        {
-            result.push(' ');
-        }
-        result.push_str(w);
-    });
-    result
-}
-
 fn main()
 {
-    let mut file_data: String = String::new();
-    File::open("main.osm").unwrap().read_to_string(&mut file_data).unwrap();
+    let mut raw_file: String = String::new();
+    File::open("main.osm").unwrap().read_to_string(&mut raw_file).unwrap();
+    raw_file = raw_file.replace('\n', " ");
+    raw_file = raw_file.replace('(', " ( ");
+    raw_file = raw_file.replace(')', " ) ");
+    raw_file = raw_file.replace('[', " [ ");
+    raw_file = raw_file.replace(']', " ] ");
+    raw_file = raw_file.replace('{', " { ");
+    raw_file = raw_file.replace('}', " } ");
 
-    file_data = file_data
-        .replace('\n', " ")
-        .replace('(', " ( ")
-        .replace(')', " ) ")
-        .replace('[', " [ ")
-        .replace(']', " ] ")
-        .replace('{', " { ")
-        .replace('}', " } ");
+    let tokens: Vec<Token> = Token::parse(&raw_file);
 
-    let mut file_strings: Vec<String> = trim_whitespace(&file_data)
-        .split(' ')
-        .collect::<Vec<&str>>()
-        .iter()
-        .map(|s| <&str as Into<String>>::into(s))
-        .collect();
-
-    file_strings.retain(|s| !s.is_empty());
-
-    let file_identifiers =
-        Identifier::parse(&file_strings.iter().map(AsRef::as_ref).collect::<Vec<&str>>());
-
-    file_identifiers.iter().for_each(|i| {
-        println!("Identifier: {i:?}");
-    });
-
-    println!("Hello, world!");
+    
 }
