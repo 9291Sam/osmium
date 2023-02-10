@@ -9,7 +9,7 @@ pub enum Lexeme<'s>
 
 impl<'s> Lexeme<'s>
 {
-    pub fn lex(tokens: Vec<Token>) -> Vec<Lexeme<'s>>
+    pub fn lex(_tokens: Vec<Token>) -> Vec<Lexeme<'s>>
     {
         
         todo!();

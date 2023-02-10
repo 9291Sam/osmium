@@ -27,6 +27,7 @@ pub enum Token<'s>
     RightCurlyBrace,
     ThinArrow,
     DoubleColon,
+    SemiColon,
     EndOfFile,
     StringLiteral(&'s str),
     Identifier(&'s str)
@@ -63,6 +64,7 @@ impl<'s> std::fmt::Debug for Token<'s>
             Self::RightCurlyBrace => write!(f, "~}}"),
             Self::ThinArrow => write!(f, "~->"),
             Self::DoubleColon => write!(f, "~::"),
+            Self::SemiColon => write!(f, ";"),
             Self::EndOfFile => write!(f, "~EOF"),
             Self::StringLiteral(s) => write!(f, "~\"{s}\""),
             Self::Identifier(s) => write!(f, "|{s}|"),
@@ -93,6 +95,7 @@ impl<'s> Token<'s>
         keyword!(string, "]", Token::RightBrace);
         keyword!(string, "{", Token::LeftCurlyBrace);
         keyword!(string, "}", Token::RightCurlyBrace);
+        keyword!(string, "->", Token::ThinArrow);
         keyword!(string, "::", Token::DoubleColon);
 
         None
@@ -150,8 +153,9 @@ impl<'s> Token<'s>
     pub fn parse(string: &str) -> Result<Vec<Token>, (TokenizationError, &str)>
     {
         let mut output: Vec<Token> = Vec::new();
-
+        
         let mut rest_str: &str = string;
+        let mut current_idx: usize = 0;
 
         loop 
         {
@@ -161,8 +165,14 @@ impl<'s> Token<'s>
             }
             let (next_str, t) = Token::find(rest_str)?;
             
-            rest_str = next_str.trim_start();
+            let rest_size: usize = rest_str.len();
+
+            let trimmed_next: &str = next_str.trim_start();
+            let next_size: usize = trimmed_next.len();
+
+            rest_str = trimmed_next;
             output.push(t); 
+            current_idx += (rest_size - next_size);
         }
         
         Ok(output)
