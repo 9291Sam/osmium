@@ -1,31 +1,61 @@
 use lazy_static::lazy_static;
 use regex::Regex;
+pub struct FileToken<'t>
+{
+    pub line: usize,
+    pub column: usize,
+    pub token: Token<'t>,
+}
 
-fn between<'a>(source: &'a str, start: &'a str, end: &'a str) -> Option<&'a str> {
-    if let Some(mut start_position) = source.find(start) {
-        start_position += start.len();
-
-        let source = &source[start_position..];
-        let end_position = source.find(end)?;
-
-        Some(&source[..end_position])
-    } else {
-        None
+impl std::fmt::Display for FileToken<'_>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        write!(f, "Token @ {}:{} -> {}", self.line, self.column, self.token)
     }
 }
 
-pub struct PinnedToken<'s> {
-    pub location: usize,
-    pub token: Token<'s>,
+pub struct FileTokenizationError
+{
+    pub line: usize,
+    pub column: usize,
+    pub error: TokenizationError,
 }
 
-impl<'s> std::fmt::Debug for PinnedToken<'s> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} : {:?}", self.location, self.token)
+impl std::fmt::Display for FileTokenizationError
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
+    {
+        write!(
+            f, 
+            "Tokenization Error: {} @ {}:{}",
+            self.error,
+            self.line,
+            self.column
+        )
     }
 }
 
-pub enum Token<'s> {
+pub enum TokenizationError
+{
+    UnclosedDelimiter,
+}
+
+impl std::fmt::Display for TokenizationError
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        write!(f, "{}", 
+            match *self
+            {
+                TokenizationError::UnclosedDelimiter => "Unclosed Delimiter!",  
+            }
+        )
+    }
+}
+
+pub enum Token<'s>
+{
     Import,
     Fn,
     LeftParen,
@@ -42,57 +72,63 @@ pub enum Token<'s> {
     Identifier(&'s str),
 }
 
-pub struct PinnedTokenizationError {
-    pub location: usize,
-    pub token: TokenizationError,
-}
+impl std::fmt::Display for Token<'_>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        let string: String = match *self
+        {
+            Token::Import           => "~Import".to_owned(),
+            Token::Fn               => "~Fn".to_owned(),
+            Token::LeftParen        => "~(".to_owned(),
+            Token::RightParen       => "~)".to_owned(),
+            Token::LeftBrace        => "~[".to_owned(),
+            Token::RightBrace       => "~]".to_owned(),
+            Token::LeftCurlyBrace   => "~{".to_owned(),
+            Token::RightCurlyBrace  => "~}".to_owned(),
+            Token::ThinArrow        => "~->".to_owned(),
+            Token::DoubleColon      => "~::".to_owned(),
+            Token::SemiColon        => "~;".to_owned(),
+            Token::EndOfFile        => "~EOF".to_owned(),
+            Token::StringLiteral(s) => format!("|{s}|"),
+            Token::Identifier(i)    => format!("|{i}|"),
+        };
 
-impl std::fmt::Debug for PinnedTokenizationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "loc: {}, tok: {}", self.location, self.token)
+        write!(f, "{}", &string)
     }
 }
 
-pub enum TokenizationError {
-    UnclosedDelimiter,
-}
-
-impl std::fmt::Display for TokenizationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            TokenizationError::UnclosedDelimiter => write!(f, "Unclosed Delimiter!"),
+impl<'s> Token<'s>
+{
+    fn size(&self) -> usize
+    {
+        match *self
+        {
+            Token::Import           => 6,
+            Token::Fn               => 2,
+            Token::LeftParen        => 1,
+            Token::RightParen       => 1,
+            Token::LeftBrace        => 1,
+            Token::RightBrace       => 1,
+            Token::LeftCurlyBrace   => 1,
+            Token::RightCurlyBrace  => 1,
+            Token::ThinArrow        => 2,
+            Token::DoubleColon      => 2,
+            Token::SemiColon        => 1,
+            Token::EndOfFile        => 0,
+            Token::StringLiteral(s) => s.len() + 2, // for the quotes
+            Token::Identifier(i)    => i.len(),
         }
     }
-}
 
-impl<'s> std::fmt::Debug for Token<'s> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Import => write!(f, "~Import"),
-            Self::Fn => write!(f, "~Fn"),
-            Self::LeftParen => write!(f, "~("),
-            Self::RightParen => write!(f, "~)"),
-            Self::LeftBrace => write!(f, "~["),
-            Self::RightBrace => write!(f, "~]"),
-            Self::LeftCurlyBrace => write!(f, "~{{"),
-            Self::RightCurlyBrace => write!(f, "~}}"),
-            Self::ThinArrow => write!(f, "~->"),
-            Self::DoubleColon => write!(f, "~::"),
-            Self::SemiColon => write!(f, "~;"),
-            Self::EndOfFile => write!(f, "~EOF"),
-            Self::StringLiteral(s) => write!(f, "|\"{s}\"|"),
-            Self::Identifier(s) => write!(f, "|{s}|"),
-        }
-    }
-}
-
-impl<'s> Token<'s> {
-    // Token and how many characters said token is
-    fn try_get_keyword(string: &str) -> Option<(Token, usize)> {
+    /// Tries to find the first keyword token available in the string
+    /// returns `None` when there is no token available
+    fn try_get_keyword(string: &str) -> Option<Token>
+    {
         macro_rules! keyword {
             ($working_string:ident, $match_string:literal, $match_token:expr) => {
-                if let Some(s) = $working_string.strip_prefix($match_string) {
-                    return Some(($match_token, $match_string.len()));
+                if let Some(_) = $working_string.strip_prefix($match_string) {
+                    return Some($match_token);
                 }
             };
         }
@@ -112,90 +148,97 @@ impl<'s> Token<'s> {
         None
     }
 
-    fn try_parse_string_literal(string: &str) -> Option<Result<(Token, usize), TokenizationError>> {
-        if let Some(s) = string.strip_prefix('\"') {
-            lazy_static! {
-                static ref RE: Regex = Regex::new(r#"(?:[^"\\]|\\.)*"#).unwrap();
-            }
+    /// Attempts to parse a string literal from the beginning of this string
+    /// 
+    /// Ok(Token)
+    /// Err(TokenizationError) - unclosed delimiter
+    /// Err(None) - no
+    /// 
+    fn try_parse_string_literal(string: &str) -> Option<Result<Token, TokenizationError>>
+    {
+        lazy_static!
+        {
+            static ref RE: Regex = Regex::new(r#"(?:[^"\\]|\\.)*"#).unwrap();
+        }
 
-            if let Some(l) = RE.find(s) 
-            {
-                // This + 2 is for the two quotes matched at the beginning an end of the string
-                Some(Ok((Token::StringLiteral(l.as_str()), l.as_str().len() + 2)))
-            } 
-            else
-            {
-                Some(Err(TokenizationError::UnclosedDelimiter))
-            }
-        } else {
-            None
+        match RE.find(string.strip_prefix('\n')?)
+        {
+            Some(s) => Some(Ok(Token::StringLiteral(s.as_str()))),
+            None => Some(Err(TokenizationError::UnclosedDelimiter))
         }
     }
 
-    // returns token and the length of said token
-    fn find(string: &str) -> Result<(Token, usize), TokenizationError> {
-        if string.is_empty() {
-            return Ok((Token::EndOfFile, 0));
+    /// Returns the first token found 
+    fn find(string: &str) -> Result<Token, TokenizationError> 
+    {
+        if string.is_empty()
+        {
+            return Ok(Token::EndOfFile);
         }
 
-        if let Some(t_s) = Self::try_get_keyword(string) {
-            return Ok(t_s);
+        // Keywords
+        if let Some(token) = Self::try_get_keyword(string)
+        {
+            return Ok(token);
         }
 
         // Literals
-        if let Some(t_s) = Self::try_parse_string_literal(string) {
-            return t_s;
+        if let Some(token) = Self::try_parse_string_literal(string)
+        {
+            return token;
         }
 
         // Identifier
         // keep incrementing the string up until we find another keyword
         let mut identifier_size: usize = 0;
 
-        loop {
-            if identifier_size > string.len() {
-                return Ok((Token::Identifier(string), string.len()));
+        loop
+        {
+            // The string ends with an identifier
+            if identifier_size > string.len()
+            {
+                return Ok(Token::Identifier(string));
             }
 
             // We found another identifier
-            if string[..identifier_size].ends_with([' ', '\n']) {
-                let found_identifier: &str = &string[..identifier_size - 1];
-                return Ok((Token::Identifier(found_identifier), found_identifier.len()));
+            if string[..identifier_size].ends_with([' ', '\n'])
+            {
+                return Ok(Token::Identifier(&string[..identifier_size - 1]));
             }
 
             // There's an upcoming keyword, everything before is an identifier
-            if Self::try_get_keyword(&string[identifier_size..]).is_some() {
-                let found_identifier = &string[..identifier_size];
-                // this + 2 is for the two encompassing quotes
-                return Ok((Token::Identifier(found_identifier), found_identifier.len()));
+            if Self::try_get_keyword(&string[identifier_size..]).is_some()
+            {
+                return Ok(Token::Identifier(&string[..identifier_size]));
             }
 
             identifier_size += 1;
         }
     }
 
-    pub fn parse(string: &str) -> Result<Vec<PinnedToken>, PinnedTokenizationError> {
-        let mut output: Vec<PinnedToken> = Vec::new();
-
+    pub fn parse(raw_string: &str) -> Result<Vec<FileToken>, TokenizationError>
+    {
+        let mut output: Vec<FileToken> = Vec::new();
         let mut current_idx: usize = 0;
 
-        loop {
-            let rest_str: &str = &string[current_idx..];
-
-            if rest_str.is_empty() {
+        loop
+        {
+            if current_idx >= raw_string.len()
+            {
                 break;
             }
 
-            match Token::find(rest_str) {
-                Ok((t, size)) => {
-                    output.push(PinnedToken { location: current_idx, token: t });
-                    current_idx += size;
-                    current_idx +=
-                        string[current_idx..].len() - string[current_idx..].trim_start().len();
-                },
-                Err(e) => {
-                    return Err(PinnedTokenizationError { location: current_idx, token: e });
-                },
-            };
+            output.push(
+                FileToken
+                {
+                    line:   raw_string[..current_idx].matches('\n').count(),
+                    column: raw_string[..current_idx].rfind('\n').unwrap_or(current_idx),
+                    token: Token::find(&raw_string[current_idx..])?
+                }
+            );
+
+            current_idx += output.last().unwrap().token.size();
+            current_idx += raw_string[current_idx..].len() - raw_string[current_idx..].trim_start().len();
         }
 
         Ok(output)

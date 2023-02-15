@@ -1,4 +1,4 @@
-use crate::tokenizer::{PinnedToken, Token};
+use crate::tokenizer::FileToken;
 
 pub enum Lexeme<'s> {
     Import(&'s str),
@@ -7,7 +7,9 @@ pub enum Lexeme<'s> {
 }
 
 impl<'s> Lexeme<'s> {
-    pub fn lex(_tokens: Vec<PinnedToken>) -> Vec<Lexeme<'s>> {
+    pub fn lex(_tokens: Vec<FileToken>) -> Vec<Lexeme<'s>>
+    {
+        
         todo!();
     }
 }
