@@ -18,6 +18,11 @@ fn lex_function<'a>(iterator: &mut Iter<FileToken>) -> Result<Lexeme<'a>, Lexing
     todo!();
 }
 
+fn lex_import<'a>(iterator: &mut Iter<FileToken>) -> Result<Lexeme<'a>, LexingError<'a>>
+{
+    todo!();
+}
+
 impl<'s> Lexeme<'s>
 {
     pub fn lex(tokens: Vec<FileToken>) -> Result<Vec<Lexeme<'s>>, LexingError>
@@ -28,14 +33,14 @@ impl<'s> Lexeme<'s>
         loop
         {
             output.push(
-                match next.borrow_mut().next()
+                match next.next()
                 {
                     Some(global_token) =>
                     {
                         match global_token.token
                         {
-                            Token::Import    => lex_function(next.borrow_mut())?,
-                            Token::Fn        => todo!(),
+                            Token::Import    => lex_import(&mut next)?,
+                            Token::Fn        => lex_function(&mut next)?,
                             Token::EndOfFile => break,
                             _                => return Err(LexingError::UnexpectedToken(global_token.clone()))
                         }
