@@ -1,5 +1,7 @@
 use lazy_static::lazy_static;
 use regex::Regex;
+
+#[derive(Clone)]
 pub struct FileToken<'t>
 {
     pub line: usize,
@@ -54,6 +56,8 @@ impl std::fmt::Display for TokenizationError
     }
 }
 
+
+#[derive(Clone)]
 pub enum Token<'s>
 {
     Import,

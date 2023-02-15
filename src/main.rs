@@ -17,5 +17,5 @@ fn main() {
 
     tokens.iter().for_each(|t| println!("{t}"));
 
-    let _lexemes: Vec<Lexeme> = Lexeme::lex(tokens);
+    let _lexemes = Lexeme::lex(tokens);
 }
