@@ -130,7 +130,7 @@ impl<'s> Token<'s>
     fn try_get_keyword(string: &str) -> Option<Token>
     {
         macro_rules! keyword {
-            ($working_string:ident, $match_string:literal, $match_token:expr) => {
+            ($working_string:ident, $match_string:literal, $match_token:expr) =>{
                 if let Some(_) = $working_string.strip_prefix($match_string) {
                     return Some($match_token);
                 }
