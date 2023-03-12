@@ -15,7 +15,7 @@ fn main() {
         Err(e) => panic!("{}", e),
     };
 
-    // tokens.iter().for_each(|t| println!("{t}"));
+    tokens.iter().for_each(|t| println!("{t}"));
 
-    // let _lexemes = Lexeme::lex(tokens);
+    let _lexemes = Lexeme::parse_from(tokens);
 }

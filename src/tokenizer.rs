@@ -68,6 +68,7 @@ pub enum Token<'s>
     RightCurlyBrace,
     DoubleColon,
     SemiColon,
+    Comma, 
     EndOfFile,
     StringLiteral(&'s str),
     Identifier(&'s str),
@@ -88,9 +89,10 @@ impl std::fmt::Display for Token<'_>
             Token::RightCurlyBrace  => "~}".to_owned(),
             Token::DoubleColon      => "~::".to_owned(),
             Token::SemiColon        => "~;".to_owned(),
+            Token::Comma            => "~,".to_owned(),
             Token::EndOfFile        => "~EOF".to_owned(),
-            Token::StringLiteral(s) => format!("|{s}|"),
-            Token::Identifier(i)    => format!("|{i}|"),
+            Token::StringLiteral(s) => format!("Lit |{s}|"),
+            Token::Identifier(i)    => format!("ident |{i}|"),
         };
 
         write!(f, "{}", &string)
@@ -112,6 +114,7 @@ impl<'s> Token<'s>
             Token::RightCurlyBrace  => 1,
             Token::DoubleColon      => 2,
             Token::SemiColon        => 1,
+            Token::Comma            => 1,
             Token::EndOfFile        => 0,
             Token::StringLiteral(s) => s.len(),
             Token::Identifier(i)    => i.len(),
@@ -139,6 +142,7 @@ impl<'s> Token<'s>
         keyword!(string, "}", Token::RightCurlyBrace);
         keyword!(string, "::", Token::DoubleColon);
         keyword!(string, ";", Token::SemiColon);
+        keyword!(string, ",", Token::Comma);
 
         None
     }
@@ -166,6 +170,10 @@ impl<'s> Token<'s>
                     if ch == '"' && last_char != Some('\\')
                     {
                         return Some(Ok(Token::StringLiteral(&input[..index + 2])));
+                    }
+                    else if ch == '\n'
+                    {
+                        return Some(Err(TokenizationError::UnclosedDelimiter))
                     }
                     else
                     {
@@ -225,11 +233,17 @@ impl<'s> Token<'s>
                 return Ok(Token::Identifier(&string[..identifier_size]));
             }
 
+            // There's an upcoming literal, everything before is an identifier
+            if Self::try_parse_string_literal(&string[identifier_size..]).is_some()
+            {
+                return Ok(Token::Identifier(&string[..identifier_size]));
+            }
+
             identifier_size += 1;
         }
     }
 
-    pub fn parse(raw_string: &str) -> Result<Vec<FileToken>, TokenizationError>
+    pub fn parse(raw_string: &str) -> Result<Vec<FileToken>, FileTokenizationError>
     {
         let mut output: Vec<FileToken> = Vec::new();
         let mut current_idx: usize = 0;
@@ -248,18 +262,28 @@ impl<'s> Token<'s>
             {
                 current_line_number += raw_string[idx_of_current_line..current_idx].matches('\n').count();
                 idx_of_current_line = current_idx;
-            }            
+            }
+
+            let column = match raw_string[..current_idx].rfind('\n')
+            {
+                Some(idx) => raw_string[..current_idx].len() - idx,
+                None => current_idx + 1,
+            };
 
             output.push(
                 FileToken
                 {
                     line: current_line_number,
-                    column: match raw_string[..current_idx].rfind('\n')
-                    {
-                        Some(idx) => raw_string[..current_idx].len() - idx,
-                        None => current_idx + 1,
-                    },
-                    token: Token::find(&raw_string[current_idx..])?
+                    column,
+                    token: Token::find(&raw_string[current_idx..])
+                        .map_err(|_| 
+                            FileTokenizationError
+                            {
+                                line: current_line_number,
+                                column,
+                                error: TokenizationError::UnclosedDelimiter,
+                            }
+                        )?
                 }
             );
 
