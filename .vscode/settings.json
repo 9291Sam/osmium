@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "*.osm": "c"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
+}
