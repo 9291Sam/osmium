@@ -12,9 +12,10 @@ pub enum Lexeme
 
 impl Lexeme
 {
-    fn parse_from(tokens: Vec<FileToken>) -> Result<Vec<Lexeme>, LexerError>
+    pub fn parse_from(tokens: Vec<FileToken>) -> Result<Vec<Lexeme>, LexerError>
     {
+        let mut it = tokens.iter();
+
         todo!();
     }
 }
-

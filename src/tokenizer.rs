@@ -248,7 +248,9 @@ impl<'s> Token<'s>
             {
                 current_line_number += raw_string[idx_of_current_line..current_idx].matches('\n').count();
                 idx_of_current_line += raw_string[idx_of_current_line..current_idx].find('\n')
-                    .unwrap() + 2;
+                    .unwrap() + 1;
+
+                idx_of_current_line = current_idx;
             }            
 
             output.push(
