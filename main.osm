@@ -1,6 +1,6 @@
-import std
+import std;
 
-fn main() -> !
+void main()
 {
     std::println("Hello, World!");
 }

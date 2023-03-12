@@ -1,6 +1,3 @@
-use lazy_static::lazy_static;
-use regex::Regex;
-
 #[derive(Clone)]
 pub struct FileToken<'t>
 {
@@ -17,6 +14,7 @@ impl std::fmt::Display for FileToken<'_>
     }
 }
 
+#[derive(Debug)]
 pub struct FileTokenizationError
 {
     pub line: usize,
@@ -38,6 +36,7 @@ impl std::fmt::Display for FileTokenizationError
     }
 }
 
+#[derive(Debug)]
 pub enum TokenizationError
 {
     UnclosedDelimiter,
@@ -61,14 +60,12 @@ impl std::fmt::Display for TokenizationError
 pub enum Token<'s>
 {
     Import,
-    Fn,
     LeftParen,
     RightParen,
     LeftBrace,
     RightBrace,
     LeftCurlyBrace,
     RightCurlyBrace,
-    ThinArrow,
     DoubleColon,
     SemiColon,
     EndOfFile,
@@ -83,14 +80,12 @@ impl std::fmt::Display for Token<'_>
         let string: String = match *self
         {
             Token::Import           => "~Import".to_owned(),
-            Token::Fn               => "~Fn".to_owned(),
             Token::LeftParen        => "~(".to_owned(),
             Token::RightParen       => "~)".to_owned(),
             Token::LeftBrace        => "~[".to_owned(),
             Token::RightBrace       => "~]".to_owned(),
             Token::LeftCurlyBrace   => "~{".to_owned(),
             Token::RightCurlyBrace  => "~}".to_owned(),
-            Token::ThinArrow        => "~->".to_owned(),
             Token::DoubleColon      => "~::".to_owned(),
             Token::SemiColon        => "~;".to_owned(),
             Token::EndOfFile        => "~EOF".to_owned(),
@@ -109,18 +104,16 @@ impl<'s> Token<'s>
         match *self
         {
             Token::Import           => 6,
-            Token::Fn               => 2,
             Token::LeftParen        => 1,
             Token::RightParen       => 1,
             Token::LeftBrace        => 1,
             Token::RightBrace       => 1,
             Token::LeftCurlyBrace   => 1,
             Token::RightCurlyBrace  => 1,
-            Token::ThinArrow        => 2,
             Token::DoubleColon      => 2,
             Token::SemiColon        => 1,
             Token::EndOfFile        => 0,
-            Token::StringLiteral(s) => s.len() + 2, // for the quotes
+            Token::StringLiteral(s) => s.len(),
             Token::Identifier(i)    => i.len(),
         }
     }
@@ -138,14 +131,12 @@ impl<'s> Token<'s>
         }
 
         keyword!(string, "import", Token::Import);
-        keyword!(string, "fn", Token::Fn);
         keyword!(string, "(", Token::LeftParen);
         keyword!(string, ")", Token::RightParen);
         keyword!(string, "[", Token::LeftBrace);
         keyword!(string, "]", Token::RightBrace);
         keyword!(string, "{", Token::LeftCurlyBrace);
         keyword!(string, "}", Token::RightCurlyBrace);
-        keyword!(string, "->", Token::ThinArrow);
         keyword!(string, "::", Token::DoubleColon);
         keyword!(string, ";", Token::SemiColon);
 
@@ -158,17 +149,35 @@ impl<'s> Token<'s>
     /// Err(TokenizationError) - unclosed delimiter
     /// Err(None) - no
     /// 
-    fn try_parse_string_literal(string: &str) -> Option<Result<Token, TokenizationError>>
+    fn try_parse_string_literal(input: &str) -> Option<Result<Token, TokenizationError>>
     {
-        lazy_static!
-        {
-            static ref RE: Regex = Regex::new(r#"(?:[^"\\]|\\.)*"#).unwrap();
+        if !input.starts_with('"') {
+            return None;
         }
 
-        match RE.find(string.strip_prefix('\n')?)
-        {
-            Some(s) => Some(Ok(Token::StringLiteral(s.as_str()))),
-            None => Some(Err(TokenizationError::UnclosedDelimiter))
+        let mut iter = input[1..].char_indices();
+        let mut last_char = None;
+
+        loop {
+            match iter.next()
+            {
+                Some((index, ch)) =>
+                {
+                    if ch == '"' && last_char != Some('\\')
+                    {
+                        return Some(Ok(Token::StringLiteral(&input[..index + 2])));
+                    }
+                    else
+                    {
+                        last_char = Some(ch);
+                        continue;
+                    }
+                }
+                None => 
+                {
+                    return Some(Err(TokenizationError::UnclosedDelimiter));
+                }
+            }
         }
     }
 
@@ -225,6 +234,9 @@ impl<'s> Token<'s>
         let mut output: Vec<FileToken> = Vec::new();
         let mut current_idx: usize = 0;
 
+        let mut idx_of_current_line: usize = 0;
+        let mut current_line_number: usize = 1;
+
         loop
         {
             if current_idx >= raw_string.len()
@@ -232,11 +244,22 @@ impl<'s> Token<'s>
                 break;
             }
 
+            if raw_string[idx_of_current_line..current_idx].contains('\n')
+            {
+                current_line_number += raw_string[idx_of_current_line..current_idx].matches('\n').count();
+                idx_of_current_line += raw_string[idx_of_current_line..current_idx].find('\n')
+                    .unwrap() + 2;
+            }            
+
             output.push(
                 FileToken
                 {
-                    line:   raw_string[..current_idx].matches('\n').count(),
-                    column: raw_string[..current_idx].rfind('\n').unwrap_or(current_idx),
+                    line: current_line_number,
+                    column: match raw_string[..current_idx].rfind('\n')
+                    {
+                        Some(idx) => raw_string[..current_idx].len() - idx,
+                        None => current_idx + 1,
+                    },
                     token: Token::find(&raw_string[current_idx..])?
                 }
             );
