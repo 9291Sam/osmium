@@ -62,8 +62,8 @@ pub enum Token<'s>
     Import,
     LeftParen,
     RightParen,
-    LeftBrace,
-    RightBrace,
+    LeftBracket,
+    RightBracket,
     LeftCurlyBrace,
     RightCurlyBrace,
     DoubleColon,
@@ -83,8 +83,8 @@ impl std::fmt::Display for Token<'_>
             Token::Import           => "~Import".to_owned(),
             Token::LeftParen        => "~(".to_owned(),
             Token::RightParen       => "~)".to_owned(),
-            Token::LeftBrace        => "~[".to_owned(),
-            Token::RightBrace       => "~]".to_owned(),
+            Token::LeftBracket        => "~[".to_owned(),
+            Token::RightBracket       => "~]".to_owned(),
             Token::LeftCurlyBrace   => "~{".to_owned(),
             Token::RightCurlyBrace  => "~}".to_owned(),
             Token::DoubleColon      => "~::".to_owned(),
@@ -108,8 +108,8 @@ impl<'s> Token<'s>
             Token::Import           => 6,
             Token::LeftParen        => 1,
             Token::RightParen       => 1,
-            Token::LeftBrace        => 1,
-            Token::RightBrace       => 1,
+            Token::LeftBracket        => 1,
+            Token::RightBracket       => 1,
             Token::LeftCurlyBrace   => 1,
             Token::RightCurlyBrace  => 1,
             Token::DoubleColon      => 2,
@@ -136,8 +136,8 @@ impl<'s> Token<'s>
         keyword!(string, "import", Token::Import);
         keyword!(string, "(", Token::LeftParen);
         keyword!(string, ")", Token::RightParen);
-        keyword!(string, "[", Token::LeftBrace);
-        keyword!(string, "]", Token::RightBrace);
+        keyword!(string, "[", Token::LeftBracket);
+        keyword!(string, "]", Token::RightBracket);
         keyword!(string, "{", Token::LeftCurlyBrace);
         keyword!(string, "}", Token::RightCurlyBrace);
         keyword!(string, "::", Token::DoubleColon);
